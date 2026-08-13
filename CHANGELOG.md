@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.1
+
+- Bound the popup to a responsive 760-pixel viewport instead of scaling its
+  design dimensions with the global text-size preference.
+- Reworked header, settings, action, and confirmation rows with responsive
+  layouts so controls remain balanced and readable at large text sizes.
+- Removed the illustrative preview while an accurate application screenshot is
+  prepared.
+
 ## 1.0.0
 
 - Initial release with visual display arrangement, per-display mode, rotation,
