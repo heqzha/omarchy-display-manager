@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 import qs.Ui
@@ -185,8 +186,10 @@ Panel {
     open: root.opened
     focusTarget: keyCatcher
     centerOnBar: true
-    contentWidth: panel.fittedContentWidth(Style.space(720), Style.space(820))
-    contentHeight: panel.fittedContentHeight(contentColumn.implicitHeight, Style.space(760))
+    // These are viewport dimensions, not spacing tokens. Running them through
+    // Style.space() made the whole card balloon when the user chose large text.
+    contentWidth: panel.fittedContentWidth(Math.min(760, panel.availableCardWidth))
+    contentHeight: panel.fittedContentHeight(contentColumn.implicitHeight, Math.min(780, panel.availableCardHeight))
 
     PanelKeyCatcher {
       id: keyCatcher
@@ -195,16 +198,17 @@ Panel {
       onTabRequested: function(direction) { root.switchPanel(direction) }
 
       ScrollView {
+        id: scrollArea
         anchors.fill: parent
         clip: true
         ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
 
         Column {
           id: contentColumn
-          width: parent.width
+          width: scrollArea.availableWidth
           spacing: Style.space(14)
 
-          Row {
+          RowLayout {
             width: parent.width
             spacing: Style.space(12)
             Text {
@@ -214,11 +218,12 @@ Panel {
               font.pixelSize: Style.font.display
             }
             Column {
-              width: parent.width - Style.space(70)
-              Text { text: "Display Manager"; color: root.barForeground; font.family: root.bar.fontFamily; font.pixelSize: Style.font.title; font.bold: true }
-              Text { text: root.displays.length + (root.displays.length === 1 ? " DISPLAY CONNECTED" : " DISPLAYS CONNECTED"); color: Qt.darker(root.barForeground, 1.4); font.family: root.bar.fontFamily; font.pixelSize: Style.font.caption; font.bold: true; font.letterSpacing: 1.1 }
+              Layout.fillWidth: true
+              Text { width: parent.width; text: "Display Manager"; color: root.barForeground; font.family: root.bar.fontFamily; font.pixelSize: Style.font.title; font.bold: true; elide: Text.ElideRight }
+              Text { width: parent.width; text: root.displays.length + (root.displays.length === 1 ? " DISPLAY CONNECTED" : " DISPLAYS CONNECTED"); color: Qt.darker(root.barForeground, 1.4); font.family: root.bar.fontFamily; font.pixelSize: Style.font.caption; font.bold: true; font.letterSpacing: 1.1; elide: Text.ElideRight }
             }
             Button {
+              Layout.alignment: Qt.AlignVCenter
               text: "Identify"
               foreground: root.barForeground
               fontFamily: root.bar.fontFamily
@@ -243,7 +248,7 @@ Panel {
             id: layoutCanvas
             visible: root.displays.length > 0
             width: parent.width
-            height: Style.space(220)
+            height: Math.min(240, Math.max(170, panel.contentWidth * 0.31))
             radius: Style.cornerRadius
             color: Qt.rgba(root.barForeground.r, root.barForeground.g, root.barForeground.b, 0.035)
             border.color: root.validLayout ? Qt.rgba(root.barForeground.r, root.barForeground.g, root.barForeground.b, 0.18) : Color.urgent
@@ -316,7 +321,7 @@ Panel {
 
           PanelSeparator { visible: root.displays.length > 0; foreground: root.barForeground }
 
-          Row {
+          Flow {
             visible: root.displays.length > 0
             width: parent.width
             spacing: Style.space(8)
@@ -335,16 +340,15 @@ Panel {
             }
           }
 
-          Grid {
+          GridLayout {
             visible: root.selectedDisplay !== null
             width: parent.width
-            columns: width > Style.space(600) ? 4 : 2
+            columns: width >= 680 ? 4 : 2
             columnSpacing: Style.space(10)
             rowSpacing: Style.space(10)
-            property real cellWidth: (width - columnSpacing * (columns - 1)) / columns
 
             Dropdown {
-              width: parent.cellWidth
+              Layout.fillWidth: true
               label: "RESOLUTION"
               foreground: root.barForeground; fontFamily: root.bar.fontFamily
               options: root.selectedDisplay ? DisplayModel.resolutions(root.selectedDisplay.modes) : []
@@ -352,7 +356,7 @@ Panel {
               onChanged: function(value) { root.setResolution(value) }
             }
             Dropdown {
-              width: parent.cellWidth
+              Layout.fillWidth: true
               label: "REFRESH RATE"
               foreground: root.barForeground; fontFamily: root.bar.fontFamily
               options: root.selectedDisplay ? DisplayModel.modesForResolution(root.selectedDisplay.modes, DisplayModel.resolution(root.selectedDisplay.mode)).map(DisplayModel.refresh) : []
@@ -360,7 +364,7 @@ Panel {
               onChanged: function(value) { root.setRefresh(value) }
             }
             Dropdown {
-              width: parent.cellWidth
+              Layout.fillWidth: true
               label: "ORIENTATION"
               foreground: root.barForeground; fontFamily: root.bar.fontFamily
               options: [{value:"0",label:"Landscape"},{value:"1",label:"Portrait"},{value:"2",label:"Landscape flipped"},{value:"3",label:"Portrait flipped"}]
@@ -368,7 +372,7 @@ Panel {
               onChanged: function(value) { root.updateDisplay("transform", Number(value)) }
             }
             Dropdown {
-              width: parent.cellWidth
+              Layout.fillWidth: true
               label: "SCALE"
               foreground: root.barForeground; fontFamily: root.bar.fontFamily
               options: root.selectedDisplay ? DisplayModel.validScales(root.selectedDisplay.mode).map(function(v){return {value:String(v),label:Math.round(v*100)+"%"}}) : []
@@ -377,12 +381,12 @@ Panel {
             }
           }
 
-          Row {
+          RowLayout {
             visible: root.selectedDisplay !== null
             width: parent.width
             spacing: Style.space(10)
             Dropdown {
-              width: (parent.width - parent.spacing) * 0.6
+              Layout.fillWidth: true
               label: "MULTIPLE DISPLAYS"
               foreground: root.barForeground; fontFamily: root.bar.fontFamily
               options: [{value:"",label:"Extend desktop"}].concat(root.displays.filter(function(d){return root.selectedDisplay && d.name !== root.selectedDisplay.name && !d.disabled}).map(function(d){return {value:d.name,label:"Duplicate " + d.name}}))
@@ -390,7 +394,7 @@ Panel {
               onChanged: function(value) { root.updateDisplay("mirror", value) }
             }
             Button {
-              anchors.bottom: parent.bottom
+              Layout.alignment: Qt.AlignBottom
               text: root.selectedDisplay && root.selectedDisplay.disabled ? "Connect display" : "Disconnect display"
               foreground: root.barForeground; fontFamily: root.bar.fontFamily; bordered: true
               enabled: root.selectedDisplay && (root.selectedDisplay.disabled || root.activeCount > 1)
@@ -400,13 +404,13 @@ Panel {
 
           PanelSeparator { foreground: root.barForeground }
 
-          Row {
+          RowLayout {
             width: parent.width
             spacing: Style.space(10)
             Text {
-              width: parent.width - applyButton.width - refreshButton.width - parent.spacing * 2
-              anchors.verticalCenter: parent.verticalCenter
-              text: root.statusMessage || "Changes are previewed for 15 seconds before being saved."
+              Layout.fillWidth: true
+              Layout.alignment: Qt.AlignVCenter
+              text: root.statusMessage || "Preview changes safely for 15 seconds."
               color: root.awaitingConfirmation ? Color.accent : Qt.darker(root.barForeground, 1.25)
               font.family: root.bar.fontFamily
               font.pixelSize: Style.font.caption
@@ -414,12 +418,14 @@ Panel {
             }
             Button {
               id: refreshButton
+              Layout.alignment: Qt.AlignVCenter
               text: "Refresh"
               foreground: root.barForeground; fontFamily: root.bar.fontFamily; bordered: true
               onClicked: root.refresh()
             }
             Button {
               id: applyButton
+              Layout.alignment: Qt.AlignVCenter
               text: root.applying ? "Applying…" : "Apply"
               foreground: root.barForeground; fontFamily: root.bar.fontFamily; bordered: true
               active: true
@@ -428,12 +434,12 @@ Panel {
             }
           }
 
-          Row {
+          RowLayout {
             visible: root.awaitingConfirmation
             width: parent.width
             spacing: Style.space(10)
-            Text { text: root.secondsRemaining + "s"; color: Color.accent; font.family: root.bar.fontFamily; font.pixelSize: Style.font.subtitle; font.bold: true; anchors.verticalCenter: parent.verticalCenter }
-            Item { width: parent.width - keepButton.width - revertButton.width - Style.space(70); height: 1 }
+            Text { text: root.secondsRemaining + "s"; color: Color.accent; font.family: root.bar.fontFamily; font.pixelSize: Style.font.subtitle; font.bold: true; Layout.alignment: Qt.AlignVCenter }
+            Item { Layout.fillWidth: true; height: 1 }
             Button { id: revertButton; text: "Revert"; foreground: root.barForeground; fontFamily: root.bar.fontFamily; bordered: true; onClicked: root.revertChanges() }
             Button { id: keepButton; text: "Keep changes"; foreground: root.barForeground; fontFamily: root.bar.fontFamily; bordered: true; active: true; onClicked: root.confirmChanges() }
           }
