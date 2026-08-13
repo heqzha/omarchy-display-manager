@@ -4,8 +4,7 @@ A native Omarchy Quickshell companion for arranging and configuring multiple
 monitors with the ease of Windows Display Settings.
 
 <p align="center">
-  <img src="docs/screenshots/display-manager-overview.png" alt="Display Manager showing the visual monitor arrangement canvas" width="48%">
-  <img src="docs/screenshots/display-manager-controls.png" alt="Display Manager controls for resolution, refresh rate, orientation, scale, and connection mode" width="48%">
+  <img src="docs/screenshots/screenshot-2026-08-12_23-16-43.png" alt="Display Manager arranging two connected displays with resolution, refresh rate, orientation, scale, and connection controls" width="100%">
 </p>
 
 ## Features
