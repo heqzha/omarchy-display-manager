@@ -16,7 +16,7 @@ JSON
 cat >"$fixture_dir/bin/hyprctl" <<'SH'
 #!/usr/bin/env bash
 if [[ ${1:-} == -j && ${2:-} == monitors ]]; then cat "$TEST_MONITORS"; exit 0; fi
-if [[ ${1:-} == keyword && ${2:-} == monitor ]]; then printf '%s\n' "$3" >>"$TEST_CALLS"; exit 0; fi
+if [[ ${1:-} == eval ]]; then printf '%s\n' "$2" >>"$TEST_CALLS"; exit 0; fi
 exit 1
 SH
 cat >"$fixture_dir/bin/systemd-run" <<'SH'
@@ -41,7 +41,7 @@ jq -e 'length == 2 and .[0].fingerprint == "BOE|Panel|ABC" and .[1].scale == 2' 
 
 config=$(jq -c '[.[0] + {x:3840,transform:1}, .[1] + {x:0}]' <<<"$state")
 $helper preview "$config" >/dev/null
-grep -q '^eDP-1,1920x1200@60.001,3840x0,1,transform,1$' "$TEST_CALLS"
+grep -q '^hl.monitor({ output = "eDP-1", mode = "1920x1200@60.001", position = "3840x0", scale = 1, transform = 1 })$' "$TEST_CALLS"
 $helper confirm >/dev/null
 
 $helper profiles-save Desk "$config" true >/dev/null

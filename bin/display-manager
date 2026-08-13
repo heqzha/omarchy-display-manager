@@ -38,31 +38,44 @@ validate_config() {
   jq -e 'type == "array" and length > 0 and
     (map(select(.disabled != true)) | length) > 0 and
     all(.[]; (.name|type)=="string" and (.name|length)>0 and
-      ((.disabled == true) or (((.mode|type)=="string") and ((.scale|tonumber) > 0))))' <<<"$config" >/dev/null \
+      ((.disabled == true) or (
+        ((.mode|type)=="string") and (.mode|length)>0 and
+        ((.x|type)=="number") and ((.y|type)=="number") and
+        ((.scale|type)=="number") and (.scale > 0) and
+        ((.transform|type)=="number") and (.transform >= 0) and (.transform <= 7) and
+        ((.mirror // "")|type)=="string"
+      )))' <<<"$config" >/dev/null \
     || die "Invalid display configuration"
 }
 
 apply_config() {
-  local config=$1 rule
+  local config=$1 expression
   validate_config "$config"
   while IFS= read -r encoded; do
-    local row name
+    local row name name_lua
     row=$(base64 -d <<<"$encoded")
     name=$(jq -r '.name' <<<"$row")
+    name_lua=$(jq -Rn --arg value "$name" '$value')
     if [[ $(jq -r '.disabled // false' <<<"$row") == true ]]; then
-      rule="$name,disable"
+      expression="hl.monitor({ output = $name_lua, disabled = true })"
     else
-      local mode x y scale transform mirror
+      local mode mode_lua position_lua x y scale transform mirror mirror_lua
       mode=$(jq -r '.mode // "preferred"' <<<"$row")
       x=$(jq -r '.x // 0' <<<"$row")
       y=$(jq -r '.y // 0' <<<"$row")
       scale=$(jq -r '.scale // 1' <<<"$row")
       transform=$(jq -r '.transform // 0' <<<"$row")
       mirror=$(jq -r '.mirror // ""' <<<"$row")
-      rule="$name,$mode,${x}x${y},$scale,transform,$transform"
-      [[ -z $mirror ]] || rule+=",mirror,$mirror"
+      mode_lua=$(jq -Rn --arg value "$mode" '$value')
+      position_lua=$(jq -Rn --arg value "${x}x${y}" '$value')
+      expression="hl.monitor({ output = $name_lua, mode = $mode_lua, position = $position_lua, scale = $scale, transform = $transform"
+      if [[ -n $mirror ]]; then
+        mirror_lua=$(jq -Rn --arg value "$mirror" '$value')
+        expression+=", mirror = $mirror_lua"
+      fi
+      expression+=" })"
     fi
-    hyprctl keyword monitor "$rule" >/dev/null || die "Hyprland rejected settings for $name"
+    hyprctl eval "$expression" >/dev/null || die "Hyprland rejected settings for $name"
   done < <(jq -r '.[] | @base64' <<<"$config")
 }
 

@@ -8,6 +8,8 @@
   layouts so controls remain balanced and readable at large text sizes.
 - Fixed preview completion handling so successful scale and layout changes
   present the confirmation controls instead of silently rolling back.
+- Apply monitor changes through Hyprland's current Lua `hl.monitor` API; the
+  legacy `keyword monitor` path could report success without changing state.
 - Removed the illustrative preview while an accurate application screenshot is
   prepared.
 
