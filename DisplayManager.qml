@@ -121,7 +121,7 @@ Panel {
     id: applyProc
     stdout: StdioCollector { waitForEnd: true }
     stderr: StdioCollector { waitForEnd: true }
-    onRunningChanged: if (!running) {
+    onExited: function(exitCode) {
       root.applying = false
       if (exitCode === 0) {
         root.awaitingConfirmation = true
