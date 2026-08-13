@@ -17,6 +17,11 @@ function refresh(mode) {
   return p ? String(Math.round(p.refresh * 100) / 100) : ""
 }
 
+function canonicalMode(mode) {
+  var p = modeParts(mode)
+  return p ? p.width + "x" + p.height + "@" + (Math.round(p.refresh * 100) / 100) : String(mode || "preferred")
+}
+
 function modesForResolution(modes, wanted) {
   return (modes || []).filter(function(mode) { return resolution(mode) === wanted })
 }
@@ -94,5 +99,5 @@ function nearestMode(modes, wantedResolution, wantedRefresh) {
     var delta = Math.abs(Number(refresh(mode)) - target)
     if (delta < distance) { best = mode; distance = delta }
   })
-  return best
+  return canonicalMode(best)
 }

@@ -61,6 +61,10 @@ apply_config() {
     else
       local mode mode_lua position_lua x y scale transform mirror mirror_lua
       mode=$(jq -r '.mode // "preferred"' <<<"$row")
+      # Hyprland reports EDID modes with a human-readable Hz suffix, while
+      # hl.monitor expects WIDTHxHEIGHT@RATE. Passing the suffix makes it
+      # silently choose a fallback mode on some displays.
+      mode=${mode%Hz}
       x=$(jq -r '.x // 0' <<<"$row")
       y=$(jq -r '.y // 0' <<<"$row")
       scale=$(jq -r '.scale // 1' <<<"$row")

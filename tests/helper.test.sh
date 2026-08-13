@@ -39,7 +39,7 @@ state=$($helper state)
 jq -e 'length == 2 and .[0].fingerprint == "BOE|Panel|ABC" and .[1].scale == 2' <<<"$state" >/dev/null
 [[ $($helper topology) == '"BOE|Panel|ABC::Dell|U2723QE|XYZ"' ]]
 
-config=$(jq -c '[.[0] + {x:3840,transform:1}, .[1] + {x:0}]' <<<"$state")
+config=$(jq -c '[.[0] + {x:3840,transform:1,mode:"1920x1200@60.001Hz"}, .[1] + {x:0}]' <<<"$state")
 $helper preview "$config" >/dev/null
 grep -q '^hl.monitor({ output = "eDP-1", mode = "1920x1200@60.001", position = "3840x0", scale = 1, transform = 1 })$' "$TEST_CALLS"
 $helper confirm >/dev/null
