@@ -30,6 +30,16 @@ function resolutions(modes) {
   return result
 }
 
+function resolutionOptions(modes) {
+  var values = resolutions(modes)
+  return values.map(function(value) {
+    return {
+      value: value,
+      label: values.length === 1 ? value + " (native)" : value
+    }
+  })
+}
+
 function validScales(mode) {
   var p = modeParts(mode)
   if (!p) return [1]

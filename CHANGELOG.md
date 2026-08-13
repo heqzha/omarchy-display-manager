@@ -10,6 +10,8 @@
   present the confirmation controls instead of silently rolling back.
 - Apply monitor changes through Hyprland's current Lua `hl.monitor` API; the
   legacy `keyword monitor` path could report success without changing state.
+- Present a display's sole advertised resolution as its disabled native mode,
+  while keeping distinct refresh rates selectable.
 - Removed the illustrative preview while an accurate application screenshot is
   prepared.
 

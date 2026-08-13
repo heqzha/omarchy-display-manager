@@ -348,11 +348,14 @@ Panel {
             rowSpacing: Style.space(10)
 
             Dropdown {
+              id: resolutionDropdown
               Layout.fillWidth: true
               label: "RESOLUTION"
               foreground: root.barForeground; fontFamily: root.bar.fontFamily
-              options: root.selectedDisplay ? DisplayModel.resolutions(root.selectedDisplay.modes) : []
+              options: root.selectedDisplay ? DisplayModel.resolutionOptions(root.selectedDisplay.modes) : []
               value: root.selectedDisplay ? DisplayModel.resolution(root.selectedDisplay.mode) : ""
+              enabled: options.length > 1
+              opacity: enabled ? 1 : 0.72
               onChanged: function(value) { root.setResolution(value) }
             }
             Dropdown {
