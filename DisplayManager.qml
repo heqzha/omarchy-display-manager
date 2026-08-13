@@ -350,7 +350,7 @@ Panel {
             Dropdown {
               id: resolutionDropdown
               Layout.fillWidth: true
-              label: "RESOLUTION"
+              label: options.length === 1 ? "RESOLUTION · NATIVE" : "RESOLUTION"
               foreground: root.barForeground; fontFamily: root.bar.fontFamily
               options: root.selectedDisplay ? DisplayModel.resolutionOptions(root.selectedDisplay.modes) : []
               value: root.selectedDisplay ? DisplayModel.resolution(root.selectedDisplay.mode) : ""
