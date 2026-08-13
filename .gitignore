@@ -1,0 +1,3 @@
+*.log
+.qmllint.ini.user
+test-results/
