@@ -33,6 +33,7 @@ export PATH="$fixture_dir/bin:$PATH"
 export XDG_STATE_HOME="$fixture_dir/state"
 export TEST_MONITORS="$fixture_dir/monitors.json"
 export TEST_CALLS="$fixture_dir/calls"
+export DISPLAY_MANAGER_SETTLE_SECONDS=0
 helper="$project_dir/bin/display-manager"
 
 state=$($helper state)
@@ -51,6 +52,12 @@ $helper profiles-delete Desk | jq -e '.profiles | length == 0' >/dev/null
 
 if $helper preview '[]' >/dev/null 2>&1; then
   echo "Expected empty configuration to fail" >&2
+  exit 1
+fi
+
+bad_config=$(jq -c '.[1].mode = "3440x1440@60"' <<<"$state")
+if $helper preview "$bad_config" >/dev/null 2>&1; then
+  echo "Expected an unapplied resolution to fail verification" >&2
   exit 1
 fi
 

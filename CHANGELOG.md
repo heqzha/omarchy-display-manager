@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.2
+
+- Verify resolution, refresh rate, and scale after Hyprland applies a layout.
+- Report hardware-rejected display modes instead of saving them as successful.
+- Automatically restore the previous layout when post-apply verification fails.
+
 ## 1.0.1
 
 - Bound the popup to a responsive 760-pixel viewport instead of scaling its

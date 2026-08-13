@@ -29,6 +29,11 @@ Panel {
     try { return JSON.parse(String(text || "")) } catch (e) { return null }
   }
 
+  function processError(text, fallback) {
+    var parsed = parseOutput(text)
+    return parsed && parsed.error ? parsed.error : fallback
+  }
+
   function refresh() {
     if (stateProc.running) return
     loading = true
@@ -120,7 +125,7 @@ Panel {
   Process {
     id: applyProc
     stdout: StdioCollector { waitForEnd: true }
-    stderr: StdioCollector { waitForEnd: true }
+    stderr: StdioCollector { id: applyError; waitForEnd: true }
     onExited: function(exitCode) {
       root.applying = false
       if (exitCode === 0) {
@@ -129,7 +134,7 @@ Panel {
         root.statusMessage = "Keep these display settings?"
         confirmationTimer.restart()
       } else {
-        root.statusMessage = "Preview failed; the previous layout was restored"
+        root.statusMessage = root.processError(applyError.text, "Preview failed; the previous layout was restored")
         root.refresh()
       }
     }
@@ -362,7 +367,7 @@ Panel {
               Layout.fillWidth: true
               label: "REFRESH RATE"
               foreground: root.barForeground; fontFamily: root.bar.fontFamily
-              options: root.selectedDisplay ? DisplayModel.modesForResolution(root.selectedDisplay.modes, DisplayModel.resolution(root.selectedDisplay.mode)).map(DisplayModel.refresh) : []
+              options: root.selectedDisplay ? DisplayModel.refreshOptions(root.selectedDisplay.modes, DisplayModel.resolution(root.selectedDisplay.mode)) : []
               value: root.selectedDisplay ? DisplayModel.refresh(root.selectedDisplay.mode) : ""
               onChanged: function(value) { root.setRefresh(value) }
             }

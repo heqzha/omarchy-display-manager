@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.bmontythe3rd.display-manager",
   "name": "Omarchy Display Manager",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "author": "Bryan Montgomery",
   "license": "MIT",
   "description": "Windows-style multi-monitor arrangement, display controls, and automatic dock profiles for Omarchy.",

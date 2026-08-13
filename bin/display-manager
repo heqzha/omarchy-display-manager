@@ -81,6 +81,38 @@ apply_config() {
     fi
     hyprctl eval "$expression" >/dev/null || die "Hyprland rejected settings for $name"
   done < <(jq -r '.[] | @base64' <<<"$config")
+
+  # Hyprland can accept a monitor rule even when the DRM backend rejects its
+  # mode. Give the compositor a moment to modeset, then verify the result so a
+  # failed resolution change is never presented (or saved) as successful.
+  sleep "${DISPLAY_MANAGER_SETTLE_SECONDS:-0.75}"
+  local live mismatch
+  live=$(state)
+  mismatch=$(jq -rn --argjson requested "$config" --argjson live "$live" '
+    def dimensions:
+      (.mode // "") | capture("^(?<width>[0-9]+)x(?<height>[0-9]+)@(?<refresh>[0-9.]+)")?;
+    first(
+      $requested[] as $want
+      | ($live | map(select(.name == $want.name)) | first // null) as $got
+      | if $got == null then
+          "\($want.name) was not reported after applying the layout"
+        elif $want.disabled == true then
+          select($got.disabled != true)
+          | "\($want.name) did not turn off"
+        else
+          ($want | dimensions) as $mode
+          | select(
+              $got.disabled == true or
+              $got.width != ($mode.width | tonumber) or
+              $got.height != ($mode.height | tonumber) or
+              (($got.refresh - ($mode.refresh | tonumber)) | fabs) > 0.25 or
+              (($got.scale - $want.scale) | fabs) > 0.01
+            )
+          | "\($want.name) stayed at \($got.width)x\($got.height)@\($got.refresh) scale \($got.scale); requested \($want.mode) scale \($want.scale)"
+        end
+    ) // empty
+  ')
+  [[ -z $mismatch ]] || die "Display hardware rejected the requested setting: $mismatch"
 }
 
 cancel_rollback() {

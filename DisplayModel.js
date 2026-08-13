@@ -26,6 +26,18 @@ function modesForResolution(modes, wanted) {
   return (modes || []).filter(function(mode) { return resolution(mode) === wanted })
 }
 
+function refreshOptions(modes, wanted) {
+  var seen = {}, result = []
+  modesForResolution(modes, wanted).forEach(function(mode) {
+    var value = refresh(mode)
+    if (value && !seen[value]) {
+      seen[value] = true
+      result.push({ value: value, label: value + " Hz" })
+    }
+  })
+  return result
+}
+
 function resolutions(modes) {
   var seen = {}, result = []
   ;(modes || []).forEach(function(mode) {
@@ -48,7 +60,9 @@ function resolutionOptions(modes) {
 function validScales(mode) {
   var p = modeParts(mode)
   if (!p) return [1]
-  var candidates = [1, 1.25, 1.5, 1.6, 1.75, 2, 2.5, 3, 4]
+  // Common integer, Windows-style, and fractional Wayland scales. Filter out
+  // values that would create fractional logical pixels for the chosen mode.
+  var candidates = [1, 1.2, 1.25, 4 / 3, 1.5, 1.6, 1.75, 2, 2.25, 2.5, 3, 4]
   return candidates.filter(function(scale) {
     return Math.abs(p.width / scale - Math.round(p.width / scale)) < 0.0001
       && Math.abs(p.height / scale - Math.round(p.height / scale)) < 0.0001
