@@ -35,16 +35,54 @@ topology() {
 
 validate_config() {
   local config=$1
-  jq -e 'type == "array" and length > 0 and
-    (map(select(.disabled != true)) | length) > 0 and
-    all(.[]; (.name|type)=="string" and (.name|length)>0 and
-      ((.disabled == true) or (
-        ((.mode|type)=="string") and (.mode|length)>0 and
-        ((.x|type)=="number") and ((.y|type)=="number") and
-        ((.scale|type)=="number") and (.scale > 0) and
-        ((.transform|type)=="number") and (.transform >= 0) and (.transform <= 7) and
-        ((.mirror // "")|type)=="string"
-      )))' <<<"$config" >/dev/null \
+  jq -e '
+    def mode_parts:
+      .mode | capture("^(?<width>[0-9]+)x(?<height>[0-9]+)@(?<refresh>[0-9]+(?:[.][0-9]+)?)(?:Hz)?$");
+    def logical_rect:
+      . as $display
+      | mode_parts as $mode
+      | ($mode.width | tonumber) as $width
+      | ($mode.height | tonumber) as $height
+      | if (($display.transform % 2) == 1) then
+          {x: $display.x, y: $display.y,
+           width: (($height / $display.scale) | round),
+           height: (($width / $display.scale) | round)}
+        else
+          {x: $display.x, y: $display.y,
+           width: (($width / $display.scale) | round),
+           height: (($height / $display.scale) | round)}
+        end;
+    . as $config
+    | type == "array" and length > 0
+    and (map(select(.disabled != true)) | length) > 0
+    and ([.[].name] | length) == ([.[].name] | unique | length)
+    and all(.[];
+      (.name | type) == "string" and (.name | length) > 0
+      and ((.disabled == true) or (
+        ((.mode | type) == "string")
+        and (.mode | test("^[0-9]+x[0-9]+@[0-9]+(?:[.][0-9]+)?(?:Hz)?$"))
+        and ((.x | type) == "number") and ((.x | floor) == .x)
+        and ((.y | type) == "number") and ((.y | floor) == .y)
+        and ((.scale | type) == "number") and (.scale > 0)
+        and ((.transform | type) == "number") and ((.transform | floor) == .transform)
+        and (.transform >= 0) and (.transform <= 7)
+        and (((.mirror // "") | type) == "string")
+        and ((.mirror // "") as $target
+          | $target == ""
+            or ($target != .name and any($config[];
+              .name == $target and .disabled != true and (.mirror // "") == "")))
+      )))
+    and ([.[] | select(.disabled != true and (.mirror // "") == "") | logical_rect] as $rects
+      | all(range(0; $rects | length);
+          . as $left
+          | all(range($left + 1; $rects | length);
+            . as $right
+            |
+            ($rects[$left].x >= ($rects[$right].x + $rects[$right].width))
+            or (($rects[$left].x + $rects[$left].width) <= $rects[$right].x)
+            or ($rects[$left].y >= ($rects[$right].y + $rects[$right].height))
+            or (($rects[$left].y + $rects[$left].height) <= $rects[$right].y))))
+  ' <<<"$config" >/dev/null \
     || die "Invalid display configuration"
 }
 
@@ -88,9 +126,9 @@ apply_config() {
   sleep "${DISPLAY_MANAGER_SETTLE_SECONDS:-0.75}"
   local live mismatch
   live=$(state)
-  mismatch=$(jq -rn --argjson requested "$config" --argjson live "$live" '
+  if ! mismatch=$(jq -rn --argjson requested "$config" --argjson live "$live" '
     def dimensions:
-      (.mode // "") | capture("^(?<width>[0-9]+)x(?<height>[0-9]+)@(?<refresh>[0-9.]+)")?;
+      (.mode // "") | capture("^(?<width>[0-9]+)x(?<height>[0-9]+)@(?<refresh>[0-9.]+)");
     first(
       $requested[] as $want
       | ($live | map(select(.name == $want.name)) | first // null) as $got
@@ -101,17 +139,23 @@ apply_config() {
           | "\($want.name) did not turn off"
         else
           ($want | dimensions) as $mode
+          | ($want.mirror // "") as $wanted_mirror
           | select(
               $got.disabled == true or
               $got.width != ($mode.width | tonumber) or
               $got.height != ($mode.height | tonumber) or
               (($got.refresh - ($mode.refresh | tonumber)) | fabs) > 0.25 or
-              (($got.scale - $want.scale) | fabs) > 0.01
+              (($got.scale - $want.scale) | fabs) > 0.01 or
+              $got.transform != $want.transform or
+              $got.mirror != $wanted_mirror or
+              (($wanted_mirror == "") and ($got.x != $want.x or $got.y != $want.y))
             )
-          | "\($want.name) stayed at \($got.width)x\($got.height)@\($got.refresh) scale \($got.scale); requested \($want.mode) scale \($want.scale)"
+          | "\($want.name) stayed at \($got.width)x\($got.height)@\($got.refresh), position \($got.x)x\($got.y), scale \($got.scale), transform \($got.transform), mirror \($got.mirror); requested \($want.mode), position \($want.x)x\($want.y), scale \($want.scale), transform \($want.transform), mirror \($wanted_mirror)"
         end
     ) // empty
-  ')
+  '); then
+    die "Could not verify the applied display configuration"
+  fi
   [[ -z $mismatch ]] || die "Display hardware rejected the requested setting: $mismatch"
 }
 
@@ -125,20 +169,40 @@ schedule_rollback() {
   need systemd-run
   cancel_rollback
   systemd-run --user --quiet --unit=omarchy-display-manager-rollback \
-    --on-active=15s "$plugin_dir/bin/display-manager" revert >/dev/null
+    --on-active=15s "$plugin_dir/bin/display-manager" rollback >/dev/null
+}
+
+restore_pending() {
+  if [[ -f $pending_file ]]; then
+    local snapshot
+    snapshot=$(<"$pending_file")
+    apply_config "$snapshot"
+    rm -f "$pending_file"
+  fi
 }
 
 preview() {
-  local config=${1:-}
+  local config=${1:-} snapshot_tmp apply_error schedule_error
   [[ -n $config ]] || die "preview requires a JSON configuration"
   validate_config "$config"
-  state >"$pending_file"
-  if ! apply_config "$config"; then
-    apply_config "$(<"$pending_file")" || true
+  snapshot_tmp=$(mktemp "$state_root/pending.XXXXXX")
+  state >"$snapshot_tmp"
+  mv "$snapshot_tmp" "$pending_file"
+  if ! apply_error=$(apply_config "$config" 2>&1); then
+    if ! (apply_config "$(<"$pending_file")") >/dev/null 2>&1; then
+      die "Preview failed and the previous layout could not be restored; the recovery snapshot remains at $pending_file"
+    fi
     rm -f "$pending_file"
-    exit 1
+    printf '%s\n' "$apply_error" >&2
+    return 1
   fi
-  schedule_rollback
+  if ! schedule_error=$(schedule_rollback 2>&1); then
+    if ! (apply_config "$(<"$pending_file")") >/dev/null 2>&1; then
+      die "Automatic rollback could not be scheduled and the previous layout could not be restored; the recovery snapshot remains at $pending_file"
+    fi
+    rm -f "$pending_file"
+    die "Could not schedule automatic rollback: $schedule_error"
+  fi
   printf '{"ok":true,"timeout":15}\n'
 }
 
@@ -150,12 +214,12 @@ confirm() {
 
 revert() {
   cancel_rollback
-  if [[ -f $pending_file ]]; then
-    local snapshot
-    snapshot=$(<"$pending_file")
-    apply_config "$snapshot"
-    rm -f "$pending_file"
-  fi
+  restore_pending
+  printf '{"ok":true}\n'
+}
+
+rollback() {
+  restore_pending
   printf '{"ok":true}\n'
 }
 
@@ -174,7 +238,10 @@ profiles_save() {
   local key tmp
   key=$(topology); tmp=$(mktemp "$state_root/profiles.XXXXXX")
   jq --arg name "$name" --arg key "$key" --argjson config "$config" --argjson automatic "$automatic" '
-    .profiles |= (map(select(.name != $name))
+    .profiles |= (map(select(
+        if $automatic then (.topology != $key or .automatic != true)
+        else .name != $name
+        end))
       | (if $automatic then map(if .topology == $key then .automatic = false else . end) else . end)
       + [{name:$name, topology:$key, automatic:$automatic, displays:$config}])' "$profiles_file" >"$tmp"
   mv "$tmp" "$profiles_file"
@@ -197,12 +264,19 @@ profiles_apply() {
 
 profiles_match() {
   ensure_profiles
-  local key config name
+  local key config name snapshot apply_error
   key=$(topology)
   config=$(jq -c --arg key "$key" '[.profiles[] | select(.topology==$key and .automatic==true)][0] // empty' "$profiles_file")
   [[ -n $config ]] || { printf '{"ok":true,"matched":false}\n'; return; }
   name=$(jq -r '.name' <<<"$config")
-  apply_config "$(jq -c '.displays' <<<"$config")"
+  snapshot=$(state)
+  if ! apply_error=$(apply_config "$(jq -c '.displays' <<<"$config")" 2>&1); then
+    if ! (apply_config "$snapshot") >/dev/null 2>&1; then
+      die "Automatic profile failed and the previous layout could not be restored"
+    fi
+    printf '%s\n' "$apply_error" >&2
+    return 1
+  fi
   jq -cn --arg name "$name" '{ok:true,matched:true,name:$name}'
 }
 
@@ -212,6 +286,7 @@ case ${1:-help} in
   preview) preview "${2:-}" ;;
   confirm) confirm ;;
   revert) revert ;;
+  rollback) rollback ;;
   profiles-list) profiles_list ;;
   profiles-save) profiles_save "${2:-}" "${3:-}" "${4:-false}" ;;
   profiles-delete) profiles_delete "${2:-}" ;;

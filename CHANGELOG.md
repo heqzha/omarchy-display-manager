@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.0.3
+
+- Keep a separate automatic `Default` profile for every connected display
+  topology instead of replacing defaults saved for other docks or monitor sets.
+- Verify position, orientation, mirroring, enabled state, mode, refresh rate,
+  and scale after applying a layout.
+- Restore the complete previous layout when a preview, automatic profile, or
+  rollback-scheduler operation fails.
+- Report confirmation, restoration, and profile-save failures accurately in
+  the panel, and retry automatic profile matching after transient failures.
+- Reject duplicate outputs, overlapping layouts, malformed modes, and invalid
+  mirror targets before changing display state.
+- Add automated manifest, helper, model, shell syntax, and CI checks.
+
 ## 1.0.2
 
 - Verify resolution, refresh rate, and scale after Hyprland applies a layout.

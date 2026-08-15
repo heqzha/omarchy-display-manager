@@ -19,6 +19,7 @@ Panel {
   property bool awaitingConfirmation: false
   property int secondsRemaining: 15
   property string statusMessage: ""
+  property string refreshMessage: ""
   property string helperPath: Quickshell.env("HOME") + "/.config/omarchy/plugins/" + moduleName + "/bin/display-manager"
 
   readonly property var selectedDisplay: displays.length && selectedIndex < displays.length ? displays[selectedIndex] : null
@@ -34,8 +35,12 @@ Panel {
     return parsed && parsed.error ? parsed.error : fallback
   }
 
-  function refresh() {
-    if (stateProc.running) return
+  function refresh(message) {
+    if (stateProc.running) {
+      if (message) refreshMessage = message
+      return
+    }
+    refreshMessage = message || ""
     loading = true
     stateProc.command = [helperPath, "state"]
     stateProc.running = true
@@ -76,11 +81,14 @@ Panel {
   }
 
   function confirmChanges() {
+    if (confirmProc.running || revertProc.running) return
     confirmProc.command = [helperPath, "confirm"]
     confirmProc.running = true
   }
 
   function revertChanges() {
+    if (revertProc.running || confirmProc.running) return
+    statusMessage = "Restoring previous layout…"
     revertProc.command = [helperPath, "revert"]
     revertProc.running = true
   }
@@ -108,34 +116,47 @@ Panel {
 
   Process {
     id: stateProc
+    property bool outputValid: false
+    stderr: StdioCollector { id: stateError; waitForEnd: true }
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
         var parsed = root.parseOutput(text)
         if (parsed && Array.isArray(parsed)) {
+          stateProc.outputValid = true
           root.displays = parsed
           if (root.selectedIndex >= parsed.length) root.selectedIndex = Math.max(0, parsed.length - 1)
-          root.statusMessage = ""
-        } else root.statusMessage = "Could not read Hyprland display state"
+          root.statusMessage = root.refreshMessage
+          root.refreshMessage = ""
+        }
       }
     }
-    onRunningChanged: if (!running) root.loading = false
+    onExited: function(exitCode) {
+      if (exitCode !== 0 || !outputValid) {
+        root.statusMessage = root.processError(stateError.text, "Could not read Hyprland display state")
+        root.refreshMessage = ""
+      }
+    }
+    onRunningChanged: {
+      if (running) outputValid = false
+      else root.loading = false
+    }
   }
 
   Process {
     id: applyProc
-    stdout: StdioCollector { waitForEnd: true }
+    stdout: StdioCollector { id: applyOutput; waitForEnd: true }
     stderr: StdioCollector { id: applyError; waitForEnd: true }
     onExited: function(exitCode) {
       root.applying = false
       if (exitCode === 0) {
+        var result = root.parseOutput(applyOutput.text)
         root.awaitingConfirmation = true
-        root.secondsRemaining = 15
+        root.secondsRemaining = result && result.timeout ? Number(result.timeout) : 15
         root.statusMessage = "Keep these display settings?"
         confirmationTimer.restart()
       } else {
-        root.statusMessage = root.processError(applyError.text, "Preview failed; the previous layout was restored")
-        root.refresh()
+        root.refresh(root.processError(applyError.text, "Preview failed; the previous layout was restored"))
       }
     }
   }
@@ -143,29 +164,43 @@ Panel {
   Process {
     id: confirmProc
     stdout: StdioCollector { waitForEnd: true }
-    onRunningChanged: if (!running) {
-      root.awaitingConfirmation = false
-      confirmationTimer.stop()
-      root.statusMessage = "Display settings kept"
-      root.saveDefault()
-      root.refresh()
+    stderr: StdioCollector { id: confirmError; waitForEnd: true }
+    onExited: function(exitCode) {
+      if (exitCode === 0) {
+        root.awaitingConfirmation = false
+        confirmationTimer.stop()
+        root.statusMessage = "Saving this layout for the connected display set…"
+        root.saveDefault()
+      } else {
+        root.statusMessage = root.processError(confirmError.text, "Could not confirm display settings; automatic rollback is still active")
+      }
     }
   }
 
   Process {
     id: revertProc
     stdout: StdioCollector { waitForEnd: true }
-    onRunningChanged: if (!running) {
+    stderr: StdioCollector { id: revertError; waitForEnd: true }
+    onExited: function(exitCode) {
       root.awaitingConfirmation = false
       confirmationTimer.stop()
-      root.statusMessage = "Previous layout restored"
-      root.refresh()
+      if (exitCode === 0)
+        root.refresh("Previous layout restored")
+      else
+        root.refresh(root.processError(revertError.text, "Previous layout could not be restored"))
     }
   }
 
   Process {
     id: saveProc
     stdout: StdioCollector { waitForEnd: true }
+    stderr: StdioCollector { id: saveError; waitForEnd: true }
+    onExited: function(exitCode) {
+      if (exitCode === 0)
+        root.refresh("Display settings kept and saved for this display set")
+      else
+        root.refresh(root.processError(saveError.text, "Display settings were kept, but the automatic profile could not be saved"))
+    }
   }
 
   Timer {
@@ -176,9 +211,8 @@ Panel {
       root.secondsRemaining--
       if (root.secondsRemaining <= 0) {
         stop()
-        root.awaitingConfirmation = false
-        root.statusMessage = "Timed out; restoring previous layout"
-        root.refresh()
+        root.statusMessage = "Timed out; restoring previous layout…"
+        root.revertChanges()
       }
     }
   }
@@ -448,8 +482,8 @@ Panel {
             spacing: Style.space(10)
             Text { text: root.secondsRemaining + "s"; color: Color.accent; font.family: root.bar.fontFamily; font.pixelSize: Style.font.subtitle; font.bold: true; Layout.alignment: Qt.AlignVCenter }
             Item { Layout.fillWidth: true; height: 1 }
-            Button { id: revertButton; text: "Revert"; foreground: root.barForeground; fontFamily: root.bar.fontFamily; bordered: true; onClicked: root.revertChanges() }
-            Button { id: keepButton; text: "Keep changes"; foreground: root.barForeground; fontFamily: root.bar.fontFamily; bordered: true; active: true; onClicked: root.confirmChanges() }
+            Button { id: revertButton; text: revertProc.running ? "Reverting…" : "Revert"; foreground: root.barForeground; fontFamily: root.bar.fontFamily; bordered: true; enabled: !confirmProc.running && !revertProc.running; onClicked: root.revertChanges() }
+            Button { id: keepButton; text: confirmProc.running ? "Keeping…" : "Keep changes"; foreground: root.barForeground; fontFamily: root.bar.fontFamily; bordered: true; active: true; enabled: !confirmProc.running && !revertProc.running; onClicked: root.confirmChanges() }
           }
         }
       }

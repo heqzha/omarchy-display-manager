@@ -47,6 +47,19 @@ omarchy plugin add /absolute/path/to/omarchy-display-manager --enable
 omarchy restart shell
 ```
 
+## Update
+
+Installed copies are git-managed. Review and install the latest upstream
+changes with:
+
+```bash
+omarchy plugin update io.github.bmontythe3rd.display-manager
+```
+
+The community marketplace reads this repository's `main` branch during its
+daily catalog refresh, so existing listings do not need to be resubmitted for
+each release. Users still choose when to update their installed copy.
+
 ## Use
 
 1. Select a display by clicking its canvas tile or selector.
@@ -77,8 +90,9 @@ rm -r "${XDG_STATE_HOME:-$HOME/.local/state}/omarchy-display-manager"
 Display settings are applied locally through `hyprctl`. No telemetry or network
 requests are made. A pending layout is stored locally and a transient systemd
 user timer restores it after 15 seconds. The plugin refuses configurations that
-disable every monitor, contain overlapping extended displays, or omit required
-mode and scale values.
+disable every monitor, contain duplicate or overlapping extended displays,
+target invalid mirrors, or omit required mode and scale values. Applied layouts
+are checked against Hyprland's live state before they can be confirmed or saved.
 
 As with all community plugins, inspect the source before installation. Omarchy
 plugins run as the current user and are not sandboxed.
@@ -91,7 +105,9 @@ qmllint -I /usr/share/omarchy/shell DisplayManager.qml ProfileService.qml Identi
 ```
 
 The test suite uses a mocked `hyprctl`; it never changes the active display
-layout. See [CHANGELOG.md](CHANGELOG.md) for release history.
+layout. Continuous integration runs the model, manifest, helper, and shell
+syntax checks for every pull request and push to `main`. See
+[CHANGELOG.md](CHANGELOG.md) for release history.
 
 ## License
 
