@@ -108,7 +108,7 @@ Panel {
     id: button
     anchors.fill: parent
     bar: root.bar
-    text: Quickshell.screens.length > 1 ? "󰍺" : "󰍹"
+    text: "󱀅"
     tooltipText: "Display Manager"
     active: root.awaitingConfirmation
     onPressed: function(mouseButton) { root.toggle() }
