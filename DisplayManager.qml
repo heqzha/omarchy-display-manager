@@ -26,20 +26,6 @@ Panel {
   readonly property int activeCount: displays.filter(function(d) { return !d.disabled }).length
   readonly property bool validLayout: activeCount > 0 && !DisplayModel.hasOverlap(displays)
 
-  // PBP (dual-input) state of the selected widescreen: true when it is running
-  // at half the widest advertised width (e.g. 2560 of a 5120-wide panel).
-  readonly property bool pbpOn: {
-    if (!selectedDisplay) return false
-    var modes = DisplayModel.resolutions(selectedDisplay.modes)
-    var wide = 0
-    for (var i = 0; i < modes.length; i++) {
-      var w = Number(modes[i].split("x")[0])
-      if (w > wide) wide = w
-    }
-    var current = Number(String(selectedDisplay.mode).split("x")[0])
-    return wide > 0 && current < wide
-  }
-
   function parseOutput(text) {
     try { return JSON.parse(String(text || "")) } catch (e) { return null }
   }
@@ -110,38 +96,6 @@ Panel {
   function saveDefault() {
     saveProc.command = [helperPath, "profiles-save", "Default", JSON.stringify(DisplayModel.normalizePositions(displays)), "true"]
     saveProc.running = true
-  }
-
-  // Toggle a widescreen monitor between full native width (PBP off) and its
-  // half-width PBP mode (PBP on), matching the G9's PBP dual-input behavior.
-  // The PBP half is exactly half the widest mode's width at the same height
-  // (e.g. 5120x1440 -> 2560x1440), not just "the second-widest mode".
-  function togglePbp() {
-    if (!selectedDisplay) return
-    var d = selectedDisplay
-    var modes = DisplayModel.resolutions(d.modes)
-    if (modes.length < 2) return
-    var wideRes = null
-    for (var i = 0; i < modes.length; i++) {
-      if (!wideRes || Number(modes[i].split("x")[0]) > Number(wideRes.split("x")[0])) wideRes = modes[i]
-    }
-    var wph = Number(wideRes.split("x")[0]) / 2
-    var h = Number(wideRes.split("x")[1])
-    var halfRes = wph + "x" + h
-    // Verify the computed half is actually an advertised mode; if not, fall
-    // back to the widest mode below the full width that shares the height.
-    if (modes.indexOf(halfRes) < 0) {
-      halfRes = null
-      for (var j = 0; j < modes.length; j++) {
-        var mw = Number(modes[j].split("x")[0]), mh = Number(modes[j].split("x")[1])
-        if (mh === h && mw < Number(wideRes.split("x")[0]) && (!halfRes || mw > Number(halfRes.split("x")[0]))) halfRes = modes[j]
-      }
-      if (!halfRes) return
-    }
-    var currentWidth = Number(String(d.mode).split("x")[0])
-    var target = currentWidth === Number(String(wideRes).split("x")[0]) ? halfRes : wideRes
-    updateDisplay("mode", DisplayModel.nearestMode(d.modes, target, DisplayModel.refresh(d.mode)))
-    root.statusMessage = "PBP: switching to " + target
   }
 
   Component.onCompleted: refresh()
@@ -488,18 +442,6 @@ Panel {
               enabled: root.selectedDisplay && (root.selectedDisplay.disabled || root.activeCount > 1)
               onClicked: root.toggleEnabled()
             }
-          }
-
-          Toggle {
-            visible: root.selectedDisplay !== null && DisplayModel.resolutions(root.selectedDisplay.modes).length > 1
-            width: parent.width
-            label: "PBP (dual input)"
-            description: root.pbpOn ? "Half width (PBP on)" : "Full width (PBP off)"
-            foreground: root.barForeground
-            accent: Color.accent
-            fontFamily: root.bar.fontFamily
-            checked: root.pbpOn
-            onClicked: root.togglePbp()
           }
 
           PanelSeparator { foreground: root.barForeground }
