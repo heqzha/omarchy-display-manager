@@ -26,14 +26,9 @@ Panel {
   readonly property int activeCount: displays.filter(function(d) { return !d.disabled }).length
   readonly property bool validLayout: activeCount > 0 && !DisplayModel.hasOverlap(displays)
 
-  // Optimistic PBP target while the widget is open, so the switch responds
-  // immediately even before Apply. Cleared on refresh.
-  property var pbpPending: null
-
   // PBP (dual-input) state of the selected widescreen: true when it is running
   // at half the widest advertised width (e.g. 2560 of a 5120-wide panel).
   readonly property bool pbpOn: {
-    if (pbpPending) return pbpPending
     if (!selectedDisplay) return false
     var modes = DisplayModel.resolutions(selectedDisplay.modes)
     var wide = 0
@@ -61,7 +56,6 @@ Panel {
     }
     refreshMessage = message || ""
     loading = true
-    pbpPending = null
     stateProc.command = [helperPath, "state"]
     stateProc.running = true
   }
@@ -144,13 +138,10 @@ Panel {
       }
       if (!halfRes) return
     }
-    var currentWidth = Number(String(d.mode || d.width).split("x")[0] || 0)
+    var currentWidth = Number(String(d.mode).split("x")[0])
     var target = currentWidth === Number(String(wideRes).split("x")[0]) ? halfRes : wideRes
-    var next = DisplayModel.nearestMode(d.modes, target, DisplayModel.refresh(d.mode))
-    updateDisplay("mode", next)
-    // Flip the switch optimistically so the click gives immediate feedback.
-    root.pbpPending = target === halfRes
-    root.statusMessage = "PBP: switching to " + target + " — press Apply to confirm"
+    updateDisplay("mode", DisplayModel.nearestMode(d.modes, target, DisplayModel.refresh(d.mode)))
+    root.statusMessage = "PBP: switching to " + target
   }
 
   Component.onCompleted: refresh()
