@@ -18,15 +18,21 @@ fingerprint_filter='def fp: [(.make // ""), (.model // ""), (.serial // "")] | m
 
 state() {
   monitors | jq -c "$fingerprint_filter
-    [ .[] | {
-      name, description, make, model, serial, fingerprint: fp,
-      disabled: (.disabled == true), focused: (.focused == true),
-      mode: ((.width|tostring) + \"x\" + (.height|tostring) + \"@\" + ((.refreshRate // 60)|tostring)),
-      width, height, refresh: (.refreshRate // 60), x, y,
-      scale: (.scale // 1), transform: (.transform // 0),
-      mirror: (if (.mirrorOf // \"none\") == \"none\" then \"\" else .mirrorOf end),
-      modes: (.availableModes // [])
-    } ]"
+    . as \$all
+    | \$all
+    | (reduce .[] as \$m ({}; .[(\$m.id|tostring)] = \$m.name)) as \$byname
+    | [ .[] |
+      .mirrorOf as \$ref
+      | {
+        name, description, make, model, serial, fingerprint: fp,
+        disabled: (.disabled == true), focused: (.focused == true),
+        mode: ((.width|tostring) + \"x\" + (.height|tostring) + \"@\" + ((.refreshRate // 60)|tostring)),
+        width, height, refresh: (.refreshRate // 60), x, y,
+        scale: (.scale // 1), transform: (.transform // 0),
+        mirror: (if (\$ref == null or \$ref == \"none\") then \"\"
+                  else (\$byname[\$ref|tostring] // \$ref) end),
+        modes: (.availableModes // [])
+      } ]"
 }
 
 topology() {
@@ -111,10 +117,11 @@ apply_config() {
       mode_lua=$(jq -Rn --arg value "$mode" '$value')
       position_lua=$(jq -Rn --arg value "${x}x${y}" '$value')
       expression="hl.monitor({ output = $name_lua, mode = $mode_lua, position = $position_lua, scale = $scale, transform = $transform"
-      if [[ -n $mirror ]]; then
-        mirror_lua=$(jq -Rn --arg value "$mirror" '$value')
-        expression+=", mirror = $mirror_lua"
-      fi
+      mirror_lua=$(jq -Rn --arg value "$mirror" '$value')
+      # Hyprland does not re-enable a previously-disabled output from a bare
+      # hl.monitor() call; the "disabled" key must be set back to false
+      # explicitly or the monitor stays off.
+      expression+=", mirror = $mirror_lua, disabled = false"
       expression+=" })"
     fi
     hyprctl eval "$expression" >/dev/null || die "Hyprland rejected settings for $name"
